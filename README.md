@@ -9,17 +9,16 @@ Joan Morral Ventura
 - Pràctica 2 de l'assignatura "Tipologia i cicle de vida de la ciència de dades"
 - UOC - Màster en ciència de dades
 
-### Dataset
-Puede chequear el dataset en la siguiente dirección:
+### Contingut
+*report de la pràctica*: 
+*codi generat*:
+*CSV amb les dades originals*:
+*CSV amb les dades finals analitzades*:
 
-https://github.com/joanmorral/Practica2/csv/vins2.csv
-
-### Llicència
-El contenido de este proyecto esta licencia bajo la Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International, y el código fuente usadao para mostrar este contenido esta licenciado bajo la MIT license.
+### Vídeo explicatiu de la pràctica
+[![IMAGE ALT TEXT](http://img.youtube.com/vi/2coK-yKJiaA/0.jpg)](http://www.youtube.com/watch?v=2coK-yKJiaA "Visualitza el vídeo de la pràctica 2")
 
 ----
-https://youtu.be/2coK-yKJiaA
 
-
-[![IMAGE ALT TEXT](http://img.youtube.com/vi/2coK-yKJiaA/0.jpg)](http://www.youtube.com/watch?v=2coK-yKJiaA "Video Title")
-
+### Llicència
+El contingut d'aquest projecte conté llicència Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International, i el codi font emprat per mostrar el contingut es troba sota la MIT license.
