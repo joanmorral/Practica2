@@ -1,6 +1,6 @@
-# Pràctica 2
+# Pràctica 2 - Neteja i validació de dades
 
-## Anàlisis estadístic sobre els sucres afegits en productes d'alimentació
+## Projecte analític sobre el preu i maridatge de vins D.O. Penedès
 
 ### Autor
 Joan Morral Ventura 
@@ -18,7 +18,10 @@ https://github.com/Bengis/nba-gap-cleaning/blob/master/data/nba_out.csv
 El contenido de este proyecto esta licencia bajo la Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International, y el código fuente usadao para mostrar este contenido esta licenciado bajo la MIT license.
 
 ----
+https://youtu.be/2coK-yKJiaA
 
+
+[![IMAGE ALT TEXT](http://img.youtube.com/vi/2coK-yKJiaA/0.jpg)](http://www.youtube.com/watch?v=2coK-yKJiaA "Video Title")
 
 
 50 grams és la quantitat màxima de sucre que es recomana consumir al dia
