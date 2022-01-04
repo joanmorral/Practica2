@@ -1,0 +1,1427 @@
+---
+title: "Pràctica 2: Neteja i validació de dades - Projecte analític sobre el preu i maridatge de vins D.O. Penedès"
+author: "Joan Morral Ventura"
+date: "Semestre 2021.1"
+output:
+  pdf_document: 
+    toc: yes
+    toc_depth: 2
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Descripció del dataset
+
+Per a consumidors de vi ocasionals, la compra d'una botella de vi acostuma a realitzar-se per recomanacions del venedor o per fixació de preu. Per altra banda, si s'acostuma a portar en un àpat social, sempre resulta un detall que maridi amb l'àpat.
+
+La idea d'aquesta pràctica és la de poder ajudar a compradors no experts a obtenir un preu de referència, per veure si el que s'ofereix a la bodega és car o barat. Per altra banda, es presentarà una carta de maridatges amb el tipus de cupatge de forma que siguem nosaltres els que escollim el tipus de vi abans d'anar a la tenda. Per tal de complementar els punts anteriors també es realitzarán d'altres analítiques amb la voluntat de completar els punts sol·licitats en la pràctica.
+
+La estatègia per per a obtenir la informació passa per capturar les dades dels cellers i bodegues com a fitxes de tast i compra dels propis vins, processar-les en el procés de neteja i tenir un dataset que permeti obtenir informació del vi.
+
+El dataset d'entrada consta de 24 atributs:
+
+|  Variables  |                                     Descripció                                    |
+|:-----------:|:---------------------------------------------------------------------------------:|
+| D.O         | Denominació d'origen.                                                             |
+| NOM DEL VI  | Nom del producte                                                                  |
+| CELLER      | Celler productor del vi                                                           |
+| DIRECCIÓ    | Adreça del celler                                                                 |
+| VOLUM       | Volum de l'envàs en el que es presenta el vi                                      |
+| ENVELLIMENT | Tipus d'envelliment, pot ser: jove, semi criança, criança, reserva, gran reserva  |
+| ESTIL       | Estil del vi, permet granular el tipus però és poc emprat                         |
+| ANYADA      | Any de producció de la botella                                                    |
+| TERRENY     | Característiques de posicionament, composició del terreny, alçada, etc.           |
+| ELABORACIÓ  | Procés d’elaboració del vi. Inoxidable o bota per assignar si és jove o criança   |
+| TIPOLOGIA   | Indica si és un vi negre, blanc, rosat, cava, escumós o dolç                      |
+| CUPATGE     | Varietat i proporció de tipus de raïm emprat pel vi                               |
+| VISTA       | Descripció de color i aspecte del vi                                              |
+| AROMA       | Descripció de les aromes primàries, secundàries i terciàries del vi               |
+| PALADAR     | Descripció del gust i postgust                                                    |
+| MARIDATGE   | Descripció de maridatge                                                           |
+| SERVEI      | Temperatura de servei (dóna informació sobre el tipus de vi)                      |
+| GRAU ALC.   | Grau d’alcohol en percentatge                                                     |
+| ACIDESA     | Acidesa tartàrica del vi                                                          |
+| SULFURÓS T. | Valor de sulfits, s’obliga a posar la quantitat atès que hi ha gent al·lèrgica    |
+| SUCRES RES. | Sucres residuals en la botella                                                    |
+| PH          | Valoració àcid-base del vi                                                        |
+| PREU        | PVP en euros                                                                      |
+| PREMIS      | Premis dels quals disposa el vi                                                   |
+
+Les variables que estructuren el dataset són la denominació d'origen, la tipologia del vi i el camp nom del vi (és la referència del producte). Les files que no continguin aquesta informació es podràn considerar nules. 
+
+La complexitat del dataset és que el nombre de camps buits resulta elevat perquè cada celler posa la informació que ell creu rellevant.
+No obstant, a l'emprar un llenguatge molt específic, es poden generar sentències que recequin mots concrets i permetin determinar el cupatge, la vista, el aroma, el paladar i el maridatge. Per a que s'entengui, una descripció pot dir que un vi porta un cupatge de Merlot i Ull de llebre, mentre que un altra pot dir que porta Ull de llebre i Merlot. Per tant, la neteja caldrà que identifiqui els dos datasets amb la mateixa informació. 
+El tractament de les codificacions de maridatge i **coupage** és el que justifica l'extensió del document.
+
+Per tal de reduir-ne les codificacions i fer-lo més simple, les descripcions del tast s'han convertit en columnes que engloben la descripció en les tres fases de tast del vi: fase visual, olfactiva i gustativa. Les noves columnes aspecte, color, aromes primàries, aromes secundàries, aromes terciàries, gust i post gust s'ha dissenyat per a que siguin factoritzables.
+
+Els camps grau d'alcohol, acidesa, sulfurós total, sucres residuals i pH són els camps numèrics que donen els cellers en funció del preu del vi, ja que es reserva a vins de qualitat. Per altra banda, l'altra variable numeral a destacar és el preu que indica el PVP.
+
+Finalment, també s'han afegit d'altres camps amb la finalitat d'ajudar a complementar la informació dels camps buits o aportar més informació que justifiqui el preu, no obstant, no s'han aplicat per falta de temps.
+
+
+# 2. Lectura del fitxer i preparació de les dades
+
+En aquest apartat:
+  - es carrega el contingut del fitxer a l'objecte vins i validació de camps (2.1)
+  - s'estandaritzen els noms de les columnes (2.2)
+  - es converteixen els tipus de les dades (2.3)
+  - es filtra la D.O. Penedès essent la única amb la que treballarem (2.4)
+
+Carreguem les llibreries necessàries per a executar la pràctica.
+```{r}
+# Carreguem els paquets R que utilitzarem al llarg de la pràctica
+library(ggpubr)
+library(dplyr) # Permet poder filtrar els camps amb determinades condicions
+library(tidyverse)
+library(rmarkdown)
+library(ResourceSelection) # Llibreria pel test Hosmer-Lemeshow
+library(nortest) # Llibreria per a realitzar lillie.test - contrast de normalitat
+library(corrgram) #Llibreria per aplicarr correlació
+
+# Ocultació missatges de llibreries
+suppressWarnings(suppressMessages(library(VIM)))
+
+# Definim els colors segons llibre d'estil UOC
+uoc_palette <- c("#000078", "#73EDFF", "#38FF90", "#FFE000", "#FF7D87", "#BD9EFF", "#FF87FF")
+```
+
+## 2.1 Lectura de dades, creació d'objecte vins i validació de camps
+Llegim el fitxer vins.csv i guardem les dades en un objecte amb identificador vins
+```{r}
+# Carreguem el fitxer de dades dels vins
+vins<-read.csv("..\\csv\\vins2.csv", header=TRUE, sep=";", encoding = "UTF-8")
+
+# Verifiquem l'estructura del joc de dades
+str(vins)
+```
+*Observacions:*
+- Emprant la codificació utf-8, podem veure que s'han carregat les 24 variables amb les seves 486 observacions dins l'objecte vins.
+- El tipus de contigut majoritàriament són char degut a que són captures de les fitxes de tast i pàgines web dels cellers i bodegues, tota aquesta informació es processarà en l'apartat 3. El seu contingut està en català, de forma que les paraules clau caldrà treballar-les en aquest aspecte.
+- Els camps qualitatius es presenten amb unitats, de forma que caldrà tenir-ho present en la conversió de tipus de dada.
+- La taula es presenta forces camps buits degut al mecanisme emprat i a la informació disponible que varia en funció del celler. Aquest aspecte farà que els resultats no siguin del tot fiables ja que només es disposa de 486 camps i caldria ampliar-ne la quantitat, per exemple, a través d'enquesta als cellers. El webscrapping podria resultar resolutiu en els camps qualitatius que és el que s'acostuma a mostrar a la xarxa.
+
+## 2.2 Neteja dels noms de les columnes
+La columna denominació d'origen apareix com X.U.FEEF.DO, també tenim accents (direcció), dièresis (raïm), se separen els espais en punts, tot en majúscules, etc. 
+Es treballa per posició de columnes per si es modifiquen els noms dels camps de les columnes, no obstant, el sistema és susceptible de noves incorporacions.
+També es decideix integrar les unitats en les columnes.
+```{r}
+# S'ha plantejat un tractament individual atès que és més gràfic que treballar en llistat
+colnames(vins)[1] <- 'do'
+colnames(vins)[2] <- 'nom'
+colnames(vins)[3] <- 'celler'
+colnames(vins)[4] <- 'poblacio'
+colnames(vins)[5] <- 'volum_cl'
+colnames(vins)[6] <- 'envelliment'
+colnames(vins)[7] <- 'estil'
+colnames(vins)[8] <- 'anyada'
+colnames(vins)[9] <- 'vinya'
+colnames(vins)[10] <- 'elaboracio'
+colnames(vins)[11] <- 'tipologia'
+colnames(vins)[12] <- 'cupatge'
+colnames(vins)[13] <- 'vista'
+colnames(vins)[14] <- 'aroma'
+colnames(vins)[15] <- 'paladar'
+colnames(vins)[16] <- 'maridatge'
+colnames(vins)[17] <- 'tservei'
+colnames(vins)[18] <- 'graduacio_alcoholica_per'
+colnames(vins)[19] <- 'acidesa_g_l_tartaric'
+colnames(vins)[20] <- 'sulfuros_total_mg_l'
+colnames(vins)[21] <- 'sucres_residuals_g_l'
+colnames(vins)[22] <- 'ph'
+colnames(vins)[23] <- 'preu_euros'
+colnames(vins)[24] <- 'premis'
+
+# Modifiquem el ordre de tipologia
+vins<-vins[,c(1,2,11,6,8,7,3,4,5,9,10,12,13,14,15,16,17,18,19,20,21,22,23,24)]
+
+# Verifiquem els canvis en les columnes del set de dades
+str(vins)
+```
+
+## 2.3 Tractament i conversions de dades quantitatives
+Algunes dades numèriques es capturen amb les unitats, de forma que no són interpretades com a xifres. Per a veure si ens aporten alguna informació a simple vista, cal tractar-les abans del propi tractament de dades.
+
+El preu s'ha llegit com un char, no com un double. A més, incorpora les unitats de euro com \200 i hi ha falta de discordància entre el punt i la coma.
+```{r}
+# Eliminem les unitats de euro presents com a \200
+vins$preu_euros <- gsub('\200', '', vins$preu_euros)
+
+# Modifiquem les comes per punts
+vins$preu_euros <- gsub(',', '.', vins$preu_euros)
+
+# Convertim el tipus de variable de la columna de char a double
+vins$preu_euros <- as.numeric(vins$preu_euros)
+```
+
+El volum s'ha llegit com un char, no com un integer degut a que incorpora les unitats de centilitres.
+```{r}
+# Eliminem les unitats de centilitres de volum
+vins$volum_cl <- gsub('cl', '', vins$volum_cl)
+
+# Modifiquem les comes per punts
+vins$volum_cl <- gsub(',', '.', vins$volum_cl)
+
+# Convertim el tipus de variable de la columna de char a numèric
+vins$volum_cl <- as.numeric(vins$volum_cl)
+```
+
+La graduació alcohòlica també s'ha identificat com un char per la interpretació del símbol de %.
+```{r}
+# Eliminem el símbol de %
+vins$graduacio_alcoholica_per <- gsub('%', '', vins$graduacio_alcoholica_per)
+
+# Modifiquem les comes per punts
+vins$graduacio_alcoholica_per <- gsub(',', '.', vins$graduacio_alcoholica_per)
+
+# Convertim el tipus de variable de la columna de char a numèric
+vins$graduacio_alcoholica_per <- as.numeric(vins$graduacio_alcoholica_per)
+```
+
+La acidesa també s'ha identificat com un char per la interpretació del símbol g/l tartàric.
+```{r}
+# Eliminem el símbol de %
+vins$acidesa_g_l_tartaric <- gsub('g/L tartàric', '', vins$acidesa_g_l_tartaric)
+
+# Modifiquem les comes per punts
+vins$acidesa_g_l_tartaric <- gsub(',', '.', vins$acidesa_g_l_tartaric)
+
+# Convertim el tipus de variable de la columna de char a numèric
+vins$acidesa_g_l_tartaric <- as.numeric(vins$acidesa_g_l_tartaric)
+```
+
+El paràmetre de sulfits també s'ha identificat com un char per la interpretació del símbol de mg/l.
+```{r}
+# Eliminem el símbol de mg/l
+vins$sulfuros_total_mg_l <- gsub('mg/l', '', vins$sulfuros_total_mg_l)
+
+# Modifiquem les comes per punts
+vins$sulfuros_total_mg_l <- gsub(',', '.', vins$sulfuros_total_mg_l)
+
+# Convertim el tipus de variable de la columna de char a numèric
+vins$sulfuros_total_mg_l <- as.numeric(vins$sulfuros_total_mg_l)
+```
+
+Finalment, també cal convertir els sucres residuals, passant-los de char a numeric.
+```{r}
+# Eliminem el símbol de g/l
+vins$sucres_residuals_g_l <- gsub('g/l', '', vins$sucres_residuals_g_l)
+
+# Modifiquem les comes per punts
+vins$sucres_residuals_g_l <- gsub(',', '.', vins$sucres_residuals_g_l)
+
+# Convertim el tipus de variable de la columna de char a numèric
+vins$sucres_residuals_g_l <- as.numeric(vins$sucres_residuals_g_l)
+```
+
+```{r}
+# Per tornar a mostrar les classes de les columnes
+#str(vins)
+
+# Mostar de forma més elegant els valors numèrics amb una estadística descriptiva bàsica
+#summary(vins)
+```
+*Observacions:*
+- Podem veure que les conversions s'han realitzat correctament, ja que els camps presenten estadística descriptiva. 
+- Resalta el nombre de camps buits, NA que es presenten. Acabaràn essent un presagi de que la correlació que obtinguem serà poc representativa.
+
+
+## 2.4 Factorització D.O. i selecció de la D.O. Penedès
+
+La manca de dades numèriques i l'alt volum de possibilitats de la pràctica fa que reduïm el scope a la D.O. Penedès.
+Les DO ens permeten granularitat i aïllament entre els diferents tipus de vins, també comparar-los si fes falta.
+```{r}
+# Factoritzem les denominacions de origen dels vins inclosos a la base de dades
+vins$do <- as.factor(vins$do)
+
+# Mostrem el comptatge de la totalitat de vins inclosos en la base de dades
+summary(vins$do)
+```
+
+## 2.5 Selecció dels camps amb els que es treballarà: només D.O. Penedès
+En un principi es volia realitzar una comparació entre vins, però el schedule no ha permès l'activitat, de forma que només ens em focalitzat en la D.O. Penedès.
+```{r}
+vins <- vins[ which(vins$do=='D.O. Penedès'), ]
+
+# Mostar de forma més elegant els valors numèrics amb una estadística descriptiva bàsica
+#summary(vins)
+```
+*Observacions:*
+- Ens quedem en 368 vins de D.O. Penedès
+
+# 3. Neteja de dades
+
+En aquest apartat:
+  - s'eliminen les columnes innecessàries (3.1)
+  - s'eliminen files que no continguin els camps clau (3.2)
+  - s'eliminen duplicats (3.3)
+  - tractament de l'atribut "tipologia" (3.4)
+  - tractament de l'atribut "envelliment" (3.5)
+  - tractament de l'atribut "cupatge" (3.6)
+  - tractament de l'atribut "celler" (3.7)
+  - tractament de l'atribut "poblacio" (3.8)
+  - tractament de l'atribut "tservei" (3.9)
+  - extracció descriptiva visual, atributs "aspecte" i "color" (3.10)
+  - extracció descriptiva olfactiva, atributs "aromes_1", "aromes_2" i "aromes_3" (3.11)
+  - extracció descriptiva gustativa, atributs "gust" i "post_gust" (3.12)
+  - tractament de l'atribut "maridatge" (3.13)
+  - tractament de camps buits (3.14)
+  - comprovació de valors extrems (3.15)
+  - s'eliminen les columnes no treballades per falta de scope (3.16)
+  - exportació del CLEAN dataset: vins_DO_Penedes.csv (3.17)
+
+## 3.1 Eliminació de columnes innecessàries per contingut
+
+Es considera que la columna de volum_cl no aporta informació, atès que les botelles presenten un format homogeni.
+D'aquest punt s'en treu la proposta de que els vinaters potser podrien innovar en format o volums.
+```{r}
+# Es mostra com el valor mínim i màxim presenten el mateix valor.
+summary(vins$volum_cl)
+
+# Eliminem la columna volum_cl
+vins$volum_cl <- NULL
+
+# Eliminem la columna estil de vi
+vins$estil <- NULL
+```
+
+## 3.2 Eliminació de files que no tinguin el nom del vi (clau de traçabilitat)
+Les columnes que considerem d'estructura no poden contenir files amb valors NA, de forma que són eliminades.
+```{r}
+# Eliminem les files que no presentin noms
+vins <- filter(vins, nom != "")
+
+# Eliminem les files que no presentin la tipologia ja que és l'element clau per a trobar relacions
+vins <- filter(vins, tipologia != "")
+```
+
+## 3.3 Eliminació de duplicats
+El cas de tenir vins duplicats s'eliminen per evitar que tinguin una major presència.
+```{r}
+# Eliminem les files duplicades
+vins <- vins[!duplicated(vins), ]
+```
+
+## 3.4 Conversió de la tipologia del vi
+En tipologia de vi es desitja categoritzar el vi segons si és negre, blanc o rosat. Les varietats de cava, escumosos i dolços no es consideraràn.
+Com que el camp de tipologia del vi incorpora altres elements descriptius, s'ha considerat crear una nova columna per identificar vins ecològics i els joves que afectin els camp d'estil.
+```{r}
+# Mostra dels noms com exemple
+#str(vins$tipologia)
+
+# Generem una columna categòrica ecològica
+vins$ecologic <- ifelse(grepl("eco", vins$tipologia), "Si", "No")
+
+# Treballem amb l'envelliment del vi
+vins$envelliment <- ifelse(grepl("jove", vins$tipologia), "vi jove", vins$envelliment)
+```
+
+Treballem la neteja de la tipologia del vi. En aquests cas, netegem el les descripcions per a quedar-nos només amb els tres grups amb els que es vol treballar.
+```{r}
+#vins$TIPOLOGIA <- ifelse(vins$TIPOLOGIA %in% c('Vi blanc', 'blanc'), 'blanc', vins$TIPOLOGIA)
+
+# Converteix les descripcions en blanc, negre i rosat
+vins$tipologia <- ifelse(grepl('blanc', vins$tipologia, ignore.case = T), 'blanc', vins$tipologia)
+vins$tipologia <- ifelse(grepl('negre', vins$tipologia, ignore.case = T), 'negre', vins$tipologia)
+vins$tipologia <- ifelse(grepl('rosat', vins$tipologia, ignore.case = T), 'rosat', vins$tipologia)
+
+# Elimina vi dolçs i escumosos ja que surten del scope
+#vins<-vins[- grep("Cava", vins$tipologia, ignore.case = T),]
+#vins<-vins[- grep("dolç", vins$tipologia, ignore.case = T),]
+
+# Correccions MANUALS detectades de noms mal escrits i arreglats per inserció
+#vins$tipologia <- ifelse(grepl('nregre', vins$tipologia, ignore.case = T), 'negre', vins$tipologia)
+
+# Mostrar taula final
+#vins$tipologia
+```
+
+El tractament de valors nuls pel tipus de vi Analitzem els valors nuls del tipus de vi
+```{r}
+# Identifiquem i analitzem els valors nuls en topologia
+vins[which(vins$tipologia==""), ]
+
+# Converteix les descripcions en blanc, negre i rosat
+vins$tipologia <- ifelse(grepl('blanc', vins$nom, ignore.case = T), 'blanc', vins$tipologia)
+vins$tipologia <- ifelse(grepl('negre', vins$nom, ignore.case = T), 'negre', vins$tipologia)
+vins$tipologia <- ifelse(grepl('rosat', vins$nom, ignore.case = T), 'rosat', vins$tipologia)
+
+# Elimina els que no s'hagin pogut identificar
+vins <- filter(vins, tipologia != "")
+
+# Imputació de valors mitjançant la función kNN() del paquet VIM
+vins$tipologia <- kNN(vins)$tipologia
+```
+
+Pasem a visualitzar-se els rangs per veure si realment tenim valors coherents
+```{r}
+# Factoritzem les denominacions de origen dels vins inclosos a la base de dades
+vins$tipologia <- as.factor(vins$tipologia)
+
+# Mostrem el comptatge de la totalitat de vins inclosos en la base de dades
+summary(vins$tipologia)
+```
+
+## 3.5 Conversió de l'envelliment/maduració del vi
+A continuació treballem l'envelliment/maduració segons la Llei 24/2003, de 10 de juliol, de la Vinya i del Vi, que estableix els períodes mínims d'envelliment per a cada classificació.
+- Vi jove: no pasen per bóta (elaboració) + anyada actual
+- Vi amb semi criança: pasen per bóta però amb menys temps que un criança
+- Criança: 2 anys/24 mesos per vi negre - 1.5 anys/18 mesos per vi blanc
+- Reserva: 3 anys/36 mesos per vi negre - 2 anys/24 mesos per vi blanc
+- Gran Reserva: 5 anys/60 mesos per vi negre - 3 anys/36 mesos per vi blanc  
+```{r}
+# Definim l'any actual
+any_actual<-2021
+
+# Definicions de Vi jove
+vins$envelliment <- ifelse(grepl('Sense criança|inoxidable', vins$envelliment, ignore.case = T), 'Vi jove', NA)
+vins$envelliment <- ifelse(vins$anyada > (any_actual-1) & (grepl('bóta', vins$envelliment, ignore.case = T))== 0, 'Vi jove', vins$envelliment)
+
+# Definicions de Criança
+vins$envelliment <- ifelse((any_actual-2) >= vins$anyada & vins$anyada < (any_actual-3) & vins$tipologia == 'negre', 'Criança', vins$envelliment)
+vins$envelliment <- ifelse((any_actual-1) >= vins$anyada & vins$anyada < (any_actual-2) & vins$tipologia == 'blanc', 'Criança', vins$envelliment)
+
+# Definicions de Reserva
+vins$envelliment <- ifelse((any_actual-3) >= vins$anyada & vins$anyada < (any_actual-5) & vins$tipologia == 'negre', 'Reserva', vins$envelliment)
+vins$envelliment <- ifelse((any_actual-2) >= vins$anyada & vins$anyada < (any_actual-3) & vins$tipologia == 'blanc', 'Reserva', vins$envelliment)
+
+# Definicions de Gran Reserva
+vins$envelliment <- ifelse(vins$anyada <= (any_actual-5) & vins$tipologia == 'negre', 'Gran Reserva', vins$envelliment)
+vins$envelliment <- ifelse(vins$anyada <= (any_actual-3) & vins$tipologia == 'blanc', 'Gran Reserva', vins$envelliment)
+
+vins$envelliment <- ifelse(grepl('bot', vins$elaboracio, ignore.case = T), 'Criança', vins$envelliment)
+vins$envelliment <- ifelse(grepl('bót', vins$elaboracio, ignore.case = T), 'Criança', vins$envelliment)
+
+# Imputació de valors mitjançant la función kNN() del paquet VIM
+vins$envelliment <- kNN(vins)$envelliment
+
+# Mostrar taula final
+#vins$envelliment
+
+# Factoritzem les 5 categories existents
+vins$envelliment <- as.factor(vins$envelliment)
+
+# Mostrem la repartició dels vins segons les categories d'envelliment del vi
+summary(vins$envelliment)
+```
+
+## 3.6 Conversió dels coupage
+La mescla de les varietats de raïm
+Com que tornem a partir de descripcions, ens cal primer de tot detectar les paraules, després estandaritzar la estructura i finalment discretitzar els valors. 
+```{r}
+raim_blanc_varietat <- c("Airén", "Albarinyo", "Carinyena blanca", "Chardonnay", "Chenin blanc", "Coromina", "Forcada", "Garnatxa blanca", "Gewürztraminer", "Giró ros", "Godello", "Macabeu", "Malvasia de Sitges", "Moscatell d'Alexandria", "Moscatell de gra menut", "Parellada", "Pedro ximenes", "Picapoll blanc", "Riesling", "Sauvignon blanc", "Subirat parent", "Sumoll blanc", "Trobat blanc", "Verdejo", "Vermentino", "Vinyater", "Viognier", "Xarel·lo")
+
+raim_negre_varietat <- c("Boval", "Cabernet franc", "Cabernet sauvignon", "Garnatxa peluda", "Garnatxa negra", "Garnatxa tintorera", "Garró/mandó", "Gonfaus", "Graciano", "Malbec", "Marselan", "Samsó (carinyena)","Merlot","Monastrell","Moneu","Morenillo","Petit verdot","Picapoll negre","Pinot noir","Querol","Solana","Sumoll","Syrah","Ull de llebre","Trepat","Vidadillo (garnatxa del Po)","Xarel·lo rosat")
+
+vins$raim_Airen<- ifelse(grepl('Airén', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_PansaBlanca<- ifelse(grepl('Pansa Blanca', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Albarinyo<- ifelse(grepl('Albarinyo', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_CarinyenaBlanca<- ifelse(grepl('Carinyena blanca', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Chardonnay<- ifelse(grepl('Chardonnay', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_CheninBlanc<- ifelse(grepl('Chenin blanc', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Coromina<- ifelse(grepl('Coromina', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Forcada<- ifelse(grepl('Forcada', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_GarnatxaBlanca<- ifelse(grepl('Garnatxa blanca', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Gewurztraminer<- ifelse(grepl('Gewürztraminer', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_GiroRos<- ifelse(grepl('Giró ros', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Godello<- ifelse(grepl('Godello', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Macabeu<- ifelse(grepl('Macabeu', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_MalvasiDeSitges<- ifelse(grepl('Malvasia de Sitges', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_MoscatellAlexandria<- ifelse(grepl("Moscatell d'Alexandria", vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_MoscatellGraMenut<- ifelse(grepl('Moscatell de gra menut', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Parellada<- ifelse(grepl('Parellada', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_PedroXimenes<- ifelse(grepl('Pedro ximenes', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_PicapollBlanc<- ifelse(grepl('Picapoll blanc', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Riesling<- ifelse(grepl('Riesling', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_SauvignonBlanc<- ifelse(grepl('Sauvignon blanc', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_SubiratParent<- ifelse(grepl('Subirat parent', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_SumollBlanc<- ifelse(grepl('Sumoll blanc', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_TrobatBlanc<- ifelse(grepl('Trobat blanc',vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Verdejo<- ifelse(grepl('Verdejo', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Vermentino<- ifelse(grepl('Vermentino', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Vinyater<- ifelse(grepl('Vinyater', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Viognier<- ifelse(grepl('Viognier', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Xarello<- ifelse(grepl('Xarel·lo', vins$cupatge, ignore.case = T), 1, 0)
+
+vins$raim_Boval<- ifelse(grepl('Boval', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_CabernetFranc<- ifelse(grepl('Cabernet franc', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_CabernetSauvignon<- ifelse(grepl('Cabernet sauvignon', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_GarnatxaPeluda<- ifelse(grepl('Garnatxa peluda', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_GarnatxaNegra<- ifelse(grepl('Garnatxa negra', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_GarnatxaTintorera<- ifelse(grepl('Garnatxa tintorera', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Garro<- ifelse(grepl('Garró', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Gonfau<- ifelse(grepl('Gonfaus', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Graciano<- ifelse(grepl('Graciano', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Malbec<- ifelse(grepl('Malbec', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Marselan<- ifelse(grepl('Marselan', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Samso<- ifelse(grepl('Samsó', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Samso<- ifelse(grepl('carinyena', vins$cupatge, ignore.case = T), 1, vins$raim_Samso)
+vins$raim_Merlot<- ifelse(grepl('Merlot', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Monastrell<- ifelse(grepl('Monastrell', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Moneu<- ifelse(grepl('Moneu', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Morenillo<- ifelse(grepl('Morenillo', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_PetitVerdot<- ifelse(grepl('Petit verdot', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_PicapollNegre<- ifelse(grepl('Picapoll negre', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_PinotNoir<- ifelse(grepl('Pinot noir', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Querol<- ifelse(grepl('Querol', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Solana<- ifelse(grepl('Solana', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Sumoll<- ifelse(grepl('Sumoll', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Syrah<- ifelse(grepl('Syrah', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_UllDeLlebre<- ifelse(grepl('Ull de llebre', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Trepat<- ifelse(grepl('Trepat', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_Vidadillo<- ifelse(grepl('Vidadillo', vins$cupatge, ignore.case = T), 1, 0)
+vins$raim_XarelloRosat<- ifelse(grepl('Xarel·lo rosat', vins$cupatge, ignore.case = T), 1, 0)
+
+```
+
+```{r}
+# plotem el subset per veure quins són els aspectes que més potencien
+raim <- select(vins, raim_Airen, raim_PansaBlanca, raim_Albarinyo, raim_CarinyenaBlanca, raim_Chardonnay, raim_CheninBlanc, raim_Coromina, raim_Forcada, raim_GarnatxaBlanca, raim_Gewurztraminer, raim_GiroRos, raim_Godello, raim_Macabeu, raim_MalvasiDeSitges, raim_MoscatellAlexandria, raim_MoscatellGraMenut, raim_Parellada, raim_PedroXimenes, raim_PicapollBlanc, raim_Riesling, raim_SauvignonBlanc, raim_SubiratParent, raim_SumollBlanc, raim_TrobatBlanc, raim_Verdejo, raim_Vermentino, raim_Vinyater, raim_Viognier, raim_Xarello)
+
+# Barplot de les varietats de raïm blanc
+n_yes2 <- data.frame(type = names(raim[, -1]), 
+                    num_vins = colSums(raim[, -1] == 1))
+
+ggplot(n_yes2, aes(x = type, y = num_vins)) + 
+  geom_bar(stat = "identity") + theme(axis.text.x=element_text(angle=90, hjust=1)) + scale_fill_manual()+ theme(legend.position = "none")
+
+# plotem el subset per veure quins són els aspectes que més potencien
+raim <- select(vins, raim_Boval, raim_CabernetFranc, raim_CabernetSauvignon, raim_GarnatxaPeluda, raim_GarnatxaNegra, raim_GarnatxaTintorera, raim_Garro, raim_Gonfau, raim_Graciano, raim_Malbec, raim_Marselan, raim_Samso, raim_Merlot, raim_Monastrell, raim_Moneu, raim_Morenillo, raim_PetitVerdot, raim_PicapollNegre, raim_PinotNoir, raim_Querol, raim_Sumoll, raim_Syrah, raim_UllDeLlebre, raim_Trepat, raim_Vidadillo, raim_XarelloRosat)
+
+# Barplot de les varietats de raïm negre
+n_yes2 <- data.frame(type = names(raim[, -1]), 
+                    num_vins = colSums(raim[, -1] == 1))
+
+ggplot(n_yes2, aes(x = type, y = num_vins)) + 
+  geom_bar(stat = "identity") + theme(axis.text.x=element_text(angle=90, hjust=1)) + scale_fill_manual()+ theme(legend.position = "none")
+```
+En les gràfiques es mostren les varietats de raïm i el percentatge d'explotació a través dels cellers seguits.
+
+###3.6.1 Control de varietats de raïm de la DO del Penedès
+```{r}
+raim_DO_Penedes_21 <- c("Chardonnay","Gewürztraminer","Macabeu","Malvasia de Sitges","Moscatell d'Alexandria", "Parellada", "Riesling", "Xarel·lo", "Cabernet sauvignon", "Garnatxa blanca", "Merlot", "Monastrell", "Pinot noir", "Samsó (carinyena)", "Syrah", "Ull de llebre")
+
+# Calcular el nombre total de varietats de raïm del Penedès
+n_varietats_Penedes<-length(raim_DO_Penedes_21)
+
+# Relació de les varietats respecte el total de varietats catalogades de Catalunya
+n_varietats_raim_negre<-length(raim_negre_varietat)
+n_varietats_raim_blanc<-length(raim_blanc_varietat)
+n_varietats_total<-n_varietats_raim_negre+n_varietats_raim_blanc
+percentatge_varietats<-(n_varietats_Penedes/(n_varietats_raim_negre+n_varietats_raim_blanc))*100
+sprintf("La demominació d'origen Penedès accepta un total de %i varietats de raïm, el que suposa un %#.2f percent de varietats total.", n_varietats_Penedes, percentatge_varietats)
+```
+
+
+```{r}
+# Creem una tira binària estandarditzada per a codificar els coupage
+vins$vector_raim <- paste(vins$raim_Airen, vins$raim_PansaBlanca, vins$raim_Albarinyo, vins$raim_CarinyenaBlanca, vins$raim_Chardonnay, vins$raim_CheninBlanc, vins$raim_Coromina, vins$raim_Forcada, vins$raim_GarnatxaBlanca, vins$raim_Gewurztraminer, vins$raim_GiroRos, vins$raim_Godello, vins$raim_Macabeu, vins$raim_MalvasiDeSitges, vins$raim_MoscatellAlexandria, vins$raim_MoscatellGraMenut, vins$raim_Parellada, vins$raim_PedroXimenes, vins$raim_PicapollBlanc, vins$raim_Riesling, vins$raim_SauvignonBlanc, vins$raim_SubiratParent, vins$raim_SumollBlanc, vins$raim_TrobatBlanc, vins$raim_Verdejo, vins$raim_Vermentino, vins$raim_Vinyater, vins$raim_Viognier, vins$raim_Xarello, vins$raim_Boval, vins$raim_CabernetFranc, vins$raim_CabernetSauvignon, vins$raim_GarnatxaPeluda, vins$raim_GarnatxaNegra, vins$raim_GarnatxaTintorera, vins$raim_Garro, vins$raim_Gonfau, vins$raim_Graciano, vins$raim_Malbec, vins$raim_Marselan, vins$raim_Samso, vins$raim_Merlot, vins$raim_Monastrell, vins$raim_Moneu, vins$raim_Morenillo, vins$raim_PetitVerdot, vins$raim_PicapollNegre,vins$raim_PinotNoir, vins$raim_Querol, vins$raim_Solana, vins$raim_Sumoll, vins$raim_Syrah, vins$raim_UllDeLlebre, vins$raim_Trepat, vins$raim_Vidadillo, vins$raim_XarelloRosat, sep= "")
+
+# Factoritzem
+#vins$facto_raim <- as.numeric(factor(vins$vector_raim))
+vins$codi_coupage <- factor(vins$vector_raim)
+
+# Eliminem columnes afegides per a trobar les composicions
+vins$vector_raim <-NULL
+vins$raim_Airen<- NULL
+vins$raim_PansaBlanca<- NULL
+vins$raim_Albarinyo<- NULL
+vins$raim_CarinyenaBlanca<- NULL
+vins$raim_Chardonnay<- NULL
+vins$raim_CheninBlanc<- NULL
+vins$raim_Coromina<- NULL
+vins$raim_Forcada<- NULL
+vins$raim_GarnatxaBlanca<- NULL
+vins$raim_Gewurztraminer<- NULL
+vins$raim_GiroRos<- NULL
+vins$raim_Godello<- NULL
+vins$raim_Macabeu<- NULL
+vins$raim_MalvasiDeSitges<- NULL
+vins$raim_MoscatellAlexandria<- NULL
+vins$raim_MoscatellGraMenut<- NULL
+vins$raim_Parellada<- NULL
+vins$raim_PedroXimenes<- NULL
+vins$raim_PicapollBlanc<- NULL
+vins$raim_Riesling<- NULL
+vins$raim_SauvignonBlanc<- NULL
+vins$raim_SubiratParent<- NULL
+vins$raim_SumollBlanc<- NULL
+vins$raim_TrobatBlanc<- NULL
+vins$raim_Verdejo<- NULL
+vins$raim_Vermentino<- NULL
+vins$raim_Vinyater<- NULL
+vins$raim_Viognier<- NULL
+vins$raim_Xarello<- NULL
+
+vins$raim_Boval<- NULL
+vins$raim_CabernetFranc<- NULL
+vins$raim_CabernetSauvignon<- NULL
+vins$raim_GarnatxaPeluda<- NULL
+vins$raim_GarnatxaNegra<- NULL
+vins$raim_GarnatxaTintorera<- NULL
+vins$raim_Garro<- NULL
+vins$raim_Gonfau<- NULL
+vins$raim_Graciano<- NULL
+vins$raim_Malbec<- NULL
+vins$raim_Marselan<- NULL
+vins$raim_Samso<- NULL
+vins$raim_Merlot<- NULL
+vins$raim_Monastrell<- NULL
+vins$raim_Moneu<- NULL
+vins$raim_Morenillo<- NULL
+vins$raim_PetitVerdot<- NULL
+vins$raim_PicapollNegre<- NULL
+vins$raim_PinotNoir<- NULL
+vins$raim_Querol<- NULL
+vins$raim_Solana<- NULL
+vins$raim_Sumoll<- NULL
+vins$raim_Syrah<- NULL
+vins$raim_UllDeLlebre<- NULL
+vins$raim_Trepat<- NULL
+vins$raim_Vidadillo<- NULL
+vins$raim_XarelloRosat<- NULL
+
+summary(vins)
+```
+Existeixen un total de 41 cupatges dels quals el més emprat amb diferència és el 100% xarel·lo.
+```{r}
+# Mostra tots els cupatges
+#sort(summary(vins$codi_coupage), decreasing = TRUE, na.last = TRUE)
+
+
+# Per a identificar un cupatge, per exemple, el més convinat
+#ifelse(grepl('000000000000000000000000000010000000000000000000000000000', vins$codi_coupage, ignore.case = F),vins$cupatge,'Cupatge no identificat')
+#sprintf("La demominació d'origen Penedès accepta un total de %i varietats de raïm, el que suposa un %#.2f percent de varietats total.", n_varietats_Penedes, percentatge_varietats)
+#sprintf("El cupatge més emprat és %s .", n_varietats_Penedes, percentatge_varietats)
+```
+
+## 3.7 Conversió de cellers D.O.
+Els cellers productors dels vins D.O. es poden considerar com a categories, ja que cadascuna d'elles oferta una gran varietat de productes
+```{r}
+# Factoritzem els cellers, el que ens permetrà englobar diferents productes per un mateix productor
+vins$celler <- as.factor(vins$celler)
+
+# Mostrem la repartició dels vins segons les categories d'envelliment del vi
+#summary(vins$celler)
+```
+
+## 3.8 Tractament de l'adreça del celler a la població
+Per ajudar a definir el terroir en funció de la població
+```{r}
+# Correcció manual d'accents
+vins$poblacio <- ifelse(grepl('Vilobi del Penedès', vins$poblacio, ignore.case = T), 'Vilobí del Penedès', vins$poblacio)
+
+
+# Definició localitats del Penedès
+localitats_penedes <- c("Avionyonet del Penedès","Les Cabanyes","Castellet i la Gornal","Castellví de la Marca","Font-Rubí","Gelida","La Granada","Mediona","Olèrdola","Olesa de Bonesvalls","Pacs del Penedès","El Pla del Penedès","Pontons","Puigdàlber","Sant Cugat Sesgarrigues","Sant Llorenç d'Hortons","Sant Martí Sarroca","Sant Pere de Riudebitlles","Sant Quintí de Mediona","Sant Sadurní d'Anoia","Santa Fe del Penedès","Santa Margarida i els Monjos","Subirats","Torrelavit","Torrelles de Foix","Vilafranca del Penedès","Vilobí del Penedès","Sant Pau d'Ordal","Viladellops","Sant Pere de Ribes","Sant Esteve sesrovires","l'Arboç","Masquefa","Guardiola de Font-Rubí","Cabrera d'Anoia","Sant Joan de Mediona","Castellvi de Rosanes","La Beguda Baixa","El Montmell","Abrera","Sant Jaume dels Domenys","La Llacuna","El Vendrell","Vilanova i la Geltrú","Santa Oliva","Llorenç del Penedès","Els Casots - Subirats","Begues","Sant Marçal","Piera","Sant Martí Sarroca","Sant Llorenç d'Hortons"," Ordal")
+#str(vins$poblacio)
+
+# Creem la iteració per substituir la direcció per la població
+for (localitat in localitats_penedes) {
+  vins$poblacio<-ifelse(grepl(localitat, vins$poblacio, ignore.case = T),localitat,vins$poblacio)
+}
+
+# Factoritzem els cellers, el que ens permetrà englobar diferents productes per un mateix productor
+vins$poblacio <- as.factor(vins$poblacio)
+
+# Mostrem la repartició dels vins segons les categories d'envelliment del vi
+#summary(vins$poblacio)
+```
+
+## 3.9 Tractament de la temperatura de servei
+La temperatura de servei va intimament lligada al tipus de vi
+```{r}
+tipus_vi_pertemperaturaservei <- list("14-16ºC" = "Negres estructurat", "14ºC" = "Negra amb poca criança", "12-14ºC" = "Generós envellit", "12ºC" = "Negra jove i afruitat", "10-13ºC" = "Blanc amb bota", "8-10ºC" = "Escumosos envellits, Negres dolços, Generosos joves", "6-8ºC" = "Rosats, Escumosos joves, Blancs Joves, Blancs dolços")
+
+# Filtre de temperatures
+vins$tservei<-paste(sapply(str_extract_all(vins$tservei, "\\d+"), "[", 1),sapply(str_extract_all(vins$tservei, "\\d+"), "[", 2), sep="-")
+
+# Tractament de casos NA-NA en funció del tipus de vi negre
+vins$tservei<-ifelse(grepl('NA-NA', vins$tservei, ignore.case = T) & vins$tipologia=='negre', '14-16', vins$tservei)
+# Tractament de casos NA-NA en funció del tipus de vi blanc
+vins$tservei<-ifelse(grepl('NA-NA', vins$tservei, ignore.case = T) & vins$tipologia=='blanc|rosat', '6-8', vins$tservei)
+
+
+# Tractament de factorització
+vins$tservei <- as.factor(vins$tservei)
+
+# Mostra el comptatge
+#summary(vins$tservei)
+```
+
+## 3.10 Fase visual - Extracció descriptiva d'aspecte i color
+```{r}
+## Fase visual
+# rànquing aspecte
+ranq_aspecte<-list("net","brillant","cristalí","transparent","brut","apagat","tacat","tèrbol","velat")
+# rànquing color
+ranq_color<-list("Groc pàl·lid", "verdós", "palla", "daurat", "ambarí", "Rosat pàl·lid", "gerds", "maduixa", "pell de ceba", "rosa ataronjat","Vermell", "violeta", "robí", "cirera", "teula", "marró")
+
+# Converteix les descripcions de fase visual de l'aspecte en característiques descriptives
+vins$aspecte <- ifelse(grepl("net|nítid", vins$vista, ignore.case = T), 'net', NA)
+vins$aspecte <- ifelse(grepl('brillant', vins$vista, ignore.case = T), 'brillant', vins$aspecte)
+vins$aspecte <- ifelse(grepl('cristalí', vins$vista, ignore.case = T), 'cristalí', vins$aspecte)
+vins$aspecte <- ifelse(grepl('transparent', vins$vista, ignore.case = T), 'transparent', vins$aspecte)
+vins$aspecte <- ifelse(grepl('brut', vins$vista, ignore.case = T), 'brut', vins$aspecte)
+vins$aspecte <- ifelse(grepl('apagat', vins$vista, ignore.case = T), 'apagat', vins$aspecte)
+vins$aspecte <- ifelse(grepl('tacat', vins$vista, ignore.case = T), 'tacat', vins$aspecte)
+vins$aspecte <- ifelse(grepl('tèrbol', vins$vista, ignore.case = T), 'tèrbol', vins$aspecte)
+vins$aspecte <- ifelse(grepl('velat', vins$vista, ignore.case = T), 'velat', vins$aspecte)
+
+# Factoritzem l'aspecte
+vins$aspecte <- as.factor(vins$aspecte)
+
+# Converteix les descripcions de fase visual de color en característiques descriptives
+vins$color <- ifelse(grepl('Groc pàl·lid', vins$vista, ignore.case = T), 'groc pàl·lid', NA)
+vins$color <- ifelse(grepl('verdós', vins$vista, ignore.case = T), 'verdós', vins$color)
+vins$color <- ifelse(grepl('palla', vins$vista, ignore.case = T), 'palla', vins$color)
+vins$color <- ifelse(grepl('daurat', vins$vista, ignore.case = T), 'daurat', vins$color)
+vins$color <- ifelse(grepl('ambarí', vins$vista, ignore.case = T), 'ambarí', vins$color)
+vins$color <- ifelse(grepl('rosat', vins$vista, ignore.case = T), 'rosat', vins$color)
+vins$color <- ifelse(grepl('gerds', vins$vista, ignore.case = T), 'gerds', vins$color)
+vins$color <- ifelse(grepl('maduixa', vins$vista, ignore.case = T), 'maduixa', vins$color)
+vins$color <- ifelse(grepl('ceba', vins$vista, ignore.case = T), 'pell de ceba', vins$color)
+vins$color <- ifelse(grepl('ataronjat', vins$vista, ignore.case = T), 'rosa ataronjat', vins$color)
+vins$color <- ifelse(grepl('porpra', vins$vista, ignore.case = T), 'porpra', vins$color)
+vins$color <- ifelse(grepl('violeta|violaci', vins$vista, ignore.case = T), 'violeta', vins$color)
+vins$color <- ifelse(grepl('robí', vins$vista, ignore.case = T), 'robí', vins$color)
+vins$color <- ifelse(grepl('cirera|picota', vins$vista, ignore.case = T), 'cirera', vins$color)
+vins$color <- ifelse(grepl('teula', vins$vista, ignore.case = T), 'teula', vins$color)
+vins$color <- ifelse(grepl('marró|cafè', vins$vista, ignore.case = T), 'marró', vins$color)
+
+# Trobem el color dels vins dels uqe no s'ha identificat posant especial èmfasis el tipus de vi, ja que no pot haver-hi un blanc color cirerar picota
+vins.negres <- vins[vins$tipologia == "negre",]
+vins.blancs <- vins[vins$tipologia == "blanc",]
+vins.rosats <- vins[vins$tipologia == "rosat",]
+vins$color <- ifelse(vins$tipologia == "negre", kNN(vins.negres)$color, vins$color)
+vins$color <- ifelse(vins$tipologia == "blanc", kNN(vins.blancs)$color, vins$color)
+vins$color <- ifelse(vins$tipologia == "rosat", kNN(vins.rosats)$color, vins$color)
+
+# Factoritzem els colors 
+vins$color <- as.factor(vins$color)
+
+# Mostrem la repartició dels vins segons les categories d'envelliment del vi
+summary(vins$aspecte)
+summary(vins$color)
+
+# Eliminemla columna vins$vista
+vins$vista <- NULL
+```
+Plotem la distribució de colors del vi pròpis
+```{r}
+vins_palette_name <- c("color_groc_palid"="#FEFACA", "color_verdos"="#EEF5D8", "color_palla"="#F7E791", "color_daurat"="#F0D38A", "color_ambari"="#E4AA48", "color_rosat"="#F8C1C6", "color_gerds"="#D7738B", "color_maduixa"="#F01100", "color_pell_ceba"="#FBE7DD", "color_rosa_ataronjat"="#F6B692", "color_porpre"="#66103B", "color_violeta"="#4E0A2F", "color_robi"="#87112A", "color_cirera"="#AC0E2F", "color_teula"="#99322B", "color_marro"="#783E16")
+
+vins_palette <- c("#AC0E2F","#E4AA48","#FEFACA","#F01100","#F7E791","#FBE7DD","#66103B", "#87112A","#F6B692","#F8C1C6","#99322B","#EEF5D8","#4E0A2F","#EEF5D8","#4E0A2F")
+
+ggplot(vins, aes(x=color, fill=color)) + geom_bar(stat="count", width=0.7)+ scale_fill_manual(values=vins_palette)+ theme(legend.position = "none")+ theme(axis.text.x=element_text(angle=90, hjust=1))+ labs(title="Predomini  dels colors en els vins D.O. Penedès", x="Color predominant", y = "Freqüència")
+```
+
+Com es pot obervar en el gràfic, la característica de color dels vins DO és de color cirera picota pels vins negres i color daurat pels vins blancs.
+Seguit pel color robí en els negres i el color palla en els blancs. Tot el que surti d'aquesta gamma de colors es pot considerar exòtic i rellevant.
+
+## 3.11 Fase olfactiva - Extracció descriptiva d'aromes primàries, secundàries i terciàries
+```{r}
+## Fase olfactiva
+# rànquing intensistat
+ranq_intensitat<-list("baixa","suficient","mitja","alta")
+
+vins$intensitat <- ifelse(grepl('baixa', vins$aroma, ignore.case = T), "baixa", NA)
+vins$intensitat <- ifelse(grepl('suficient', vins$aroma, ignore.case = T), "suficient", vins$intensitat)
+vins$intensitat <- ifelse(grepl('mitja', vins$aroma, ignore.case = T), "mitja", vins$intensitat)
+vins$intensitat <- ifelse(grepl('alta', vins$aroma, ignore.case = T), "alta", vins$intensitat)
+
+# Factoritzem la intensitat
+vins$intensitat <- as.factor(vins$intensitat)
+
+# aromes primàries (sense agitar la copa)
+vins$aromes_1<- ifelse(grepl('cítrics|pera|meló|grosella|maduixa', vins$aroma, ignore.case = T), 'afruitat', NA)
+vins$aromes_1<- ifelse(grepl('romaní|eucalipturs|menta', vins$aroma, ignore.case = T), "vegetal", vins$aromes_1)
+vins$aromes_1<- ifelse(grepl('rosa|espígol|violeta', vins$aroma, ignore.case = T), "floral", vins$aromes_1)
+vins$aromes_1<- ifelse(grepl('pissarra|querosè|granit', vins$aroma, ignore.case = T), "mineral", vins$aromes_1)
+vins$aromes_1<- ifelse(grepl('nou moscada|regalèssia|pebre|vainilla', vins$aroma, ignore.case = T), "espècies", vins$aromes_1)
+
+# aromes secundàries (voltes suaus)
+vins$aromes_2<- ifelse(grepl('nous', vins$aroma, ignore.case = T), "fruits secs", NA)
+vins$aromes_2<- ifelse(grepl('iogurt|mantega', vins$aroma, ignore.case = T), "làctics", 0)
+vins$aromes_2<- ifelse(grepl('galetes|caramel', vins$aroma, ignore.case = T), "dolces", 0)
+
+# aromes terciàries ()
+vins$aromes_3<- ifelse(grepl('cafè|xocolata', vins$aroma, ignore.case = T), "aroma de bota", "sense aroma de bota")
+
+# Factoritzem les aromes primàries, secundàries i terciàries 
+vins$aromes_1 <- as.factor(vins$aromes_1)
+vins$aromes_2 <- as.factor(vins$aromes_2)
+vins$aromes_3 <- as.factor(vins$aromes_3)
+
+# Mostrem la repartició dels vins segons les aromes del vi
+summary(vins$intensitat)
+summary(vins$aromes_1)
+summary(vins$aromes_2)
+summary(vins$aromes_3)
+
+# Eliminemla columna vins$aroma
+vins$aroma <- NULL
+```
+
+## 3.12 Fase gustativa - Extracció descriptiva de gust
+```{r}
+## Fase gustativa
+# rànquing gust
+vins$gust<- ifelse(grepl('Fresc', vins$paladar, ignore.case = T), "Fresc", NA)
+vins$gust<- ifelse(grepl('Afruitat', vins$paladar, ignore.case = T), "Afruitat", vins$gust)
+vins$gust<- ifelse(grepl('Àcid', vins$paladar, ignore.case = T), "Àcid", vins$gust)
+vins$gust<- ifelse(grepl('Lleuger', vins$paladar, ignore.case = T), "Lleuger", vins$gust)
+vins$gust<- ifelse(grepl('Calent', vins$paladar, ignore.case = T), "Calent", vins$gust)
+vins$gust<- ifelse(grepl('Amarg', vins$paladar, ignore.case = T), "Amarg", vins$gust)
+vins$gust<- ifelse(grepl('Saborós', vins$paladar, ignore.case = T), "Saborós", vins$gust)
+vins$gust<- ifelse(grepl('Carnós', vins$paladar, ignore.case = T), "Carnós", vins$gust)
+vins$gust<- ifelse(grepl('Amable', vins$paladar, ignore.case = T), "Amable", vins$gust)
+vins$gust<- ifelse(grepl('Equilibrat', vins$paladar, ignore.case = T), "Equilibrat", vins$gust)
+vins$gust<- ifelse(grepl('Franc', vins$paladar, ignore.case = T), "Franc", vins$gust)
+vins$gust<- ifelse(grepl('Aspre', vins$paladar, ignore.case = T), "Aspre", vins$gust)
+vins$gust<- ifelse(grepl('Rodó', vins$paladar, ignore.case = T), "Rodó", vins$gust)
+vins$gust<- ifelse(grepl('amb cos', vins$paladar, ignore.case = T), "amb cos", vins$gust)
+vins$gust<- ifelse(grepl('pla', vins$paladar, ignore.case = T), "pla", vins$gust)
+vins$gust<- ifelse(grepl('fragant', vins$paladar, ignore.case = T), "Fragant", vins$gust)
+vins$gust<- ifelse(grepl('suau', vins$paladar, ignore.case = T), "Suau", vins$gust)
+vins$gust<- ifelse(grepl('amb personalitat', vins$paladar, ignore.case = T), "amb personalitat", vins$gust)
+vins$gust<- ifelse(grepl('càlid', vins$paladar, ignore.case = T), "càlid", vins$gust)
+vins$gust<- ifelse(grepl('astringent', vins$paladar, ignore.case = T), "astringent", vins$gust)
+vins$gust<- ifelse(grepl('sedós', vins$paladar, ignore.case = T), "sedós", vins$gust)
+vins$gust<- ifelse(grepl('pastós', vins$paladar, ignore.case = T), "pastós", vins$gust)
+vins$gust<- ifelse(grepl('ardent', vins$paladar, ignore.case = T), "ardent", vins$gust)
+
+# rànquing post gust
+post_gust_per_defecte<-"curt"
+vins$post_gust<- ifelse(grepl('mig', vins$paladar, ignore.case = T), "mig", post_gust_per_defecte)
+vins$post_gust<- ifelse(grepl('molt curt', vins$paladar, ignore.case = T), "molt curt", vins$post_gust)
+vins$post_gust<- ifelse(grepl('llarg', vins$paladar, ignore.case = T), "llarg", vins$post_gust)
+vins$post_gust<- ifelse(grepl('molt llarg', vins$paladar, ignore.case = T), "molt llarg", vins$post_gust)
+
+# Factoritzemel gust i postgust
+vins$gust <- as.factor(vins$gust)
+vins$post_gust <- as.factor(vins$post_gust)
+
+
+# Mostrem la repartició dels vins segons les categories d'envelliment del vi
+summary(vins$gust)
+summary(vins$post_gust)
+
+# Eliminemla columna vins$paladar
+vins$paladar <- NULL
+```
+
+## 3.13 Generació del codi de maridatge
+```{r}
+## Maridatge
+
+# Converteix les descripcions de fase visual de l'aspecte en característiques descriptives
+vins$maridatge_arrossos <- ifelse(grepl('arrossos|paelles', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_pastes <- ifelse(grepl('pastes|pasta|fideus|fideuà', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_aperitius <- ifelse(grepl('aperitius|tapes|entrants|entrant|pica-pica', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_canalons <- ifelse(grepl('canalons', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_amanida <- ifelse(grepl('amanida|amanides', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_carn_v <- ifelse(grepl('carns|carn vermella|carns vermelles|vedella|bou|cavall', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_carn_b <- ifelse(grepl('carns|carn blanca|ànec|pollastre|aus|porc|conill|indi|xai', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_carn_c <- ifelse(grepl('carns|caça|senglar|llebre', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_pates <- ifelse(grepl('patés', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_guisats <- ifelse(grepl('plats amb salses|salses|guisats|guisades|fricandó|estofat|estufades|peus de porc', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_rostits <- ifelse(grepl('rostits', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_embotits <- ifelse(grepl('embotits|pernils ibèrics', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_formatges_frescos <- ifelse(grepl('formatges frescos|formatge fresc', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_formatges_tendres <- ifelse(grepl('formatges de pasta tova|tendres|formatges cremosos', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_formatges_semicurats <- ifelse(grepl('formatges semi curats| semicurat', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_formatges_curats <- ifelse(grepl('formatges curats', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_formatges_potents <- ifelse(grepl('formatges blaus', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_blau <- ifelse(grepl('peix|peix blau|peixos blaus|peixos grassos|salmó', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_blanc <- ifelse(grepl('peix|peix blanc|peixos blancs', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_cru <- ifelse(grepl('carpaccio|peix cru| salmó|tonyina|carpaccions', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_fregit <- ifelse(grepl('peix fregit', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_forn <- ifelse(grepl('peix forn', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_brasa <- ifelse(grepl('peix brasa', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_fumat <- ifelse(grepl('fumats', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_salaons <- ifelse(grepl('anxoves', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_escabetx <- ifelse(grepl('escabetxats', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_marisc <- ifelse(grepl('marisc|crustàcis|ostres|gambes|galeres', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_pop <- ifelse(grepl('pop', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_bolets <- ifelse(grepl('bolets', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_cuina_asiatica <- ifelse(grepl('cuina asiàtica|japonesa|cuina de fusió', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_xocolata <- ifelse(grepl('xocolata', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_pizza <- ifelse(grepl('pizza|pizzes', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_paambtomaquet <- ifelse(grepl('pa amb tomàquet', vins$maridatge, ignore.case = T), 1, 0)
+
+# Creem una tira binària estandarditzada per a codificar els maridatge
+vins$vector_maridatge<- paste(vins$maridatge_arrossos,vins$maridatge_pastes,vins$maridatge_aperitius,vins$maridatge_canalons,vins$maridatge_amanida,vins$maridatge_carn_v,vins$maridatge_carn_b,vins$maridatge_carn_c,vins$maridatge_pates,vins$maridatge_guisats,vins$maridatge_rostits,vins$maridatge_embotits,vins$maridatge_formatges_frescos,vins$maridatge_formatges_tendres,vins$maridatge_formatges_semicurats,vins$maridatge_formatges_curats,vins$maridatge_formatges_potents,vins$maridatge_peix_blau,vins$maridatge_peix_blanc,vins$maridatge_peix_cru,vins$maridatge_peix_fregit,vins$maridatge_peix_forn,vins$maridatge_peix_brasa,vins$maridatge_peix_fumat,vins$maridatge_peix_salaons,vins$maridatge_peix_escabetx,vins$maridatge_marisc,vins$maridatge_pop,vins$maridatge_bolets,vins$maridatge_cuina_asiatica,vins$maridatge_xocolata,vins$maridatge_pizza,vins$maridatge_paambtomaquet, sep= "")
+
+# Factoritzem
+#vins$facto_raim <- as.numeric(factor(vins$vector_raim))
+vins$vector_maridatge <- factor(vins$vector_maridatge)
+
+# Adició de les possibilitats dels vins
+vins$maridatge_possibilitats <- str_count(vins$vector_maridatge, "1")
+
+# Eliminem columnes afegides per a trobar les composicions + columna original
+#vins$maridatge<-NULL
+vins$maridatge_arrossos<-NULL
+vins$maridatge_pastes<-NULL
+vins$maridatge_aperitius<-NULL
+vins$maridatge_canalons<-NULL
+vins$maridatge_amanida<-NULL
+vins$maridatge_carn_v<-NULL
+vins$maridatge_carn_b<-NULL
+vins$maridatge_carn_c<-NULL
+vins$maridatge_pates<-NULL
+vins$maridatge_guisats<-NULL
+vins$maridatge_rostits<-NULL
+vins$maridatge_embotits<-NULL
+vins$maridatge_formatges_frescos<-NULL
+vins$maridatge_formatges_tendres<-NULL
+vins$maridatge_formatges_semicurats<-NULL
+vins$maridatge_formatges_curats<-NULL
+vins$maridatge_formatges_potents<-NULL
+vins$maridatge_peix_blau<-NULL
+vins$maridatge_peix_blanc<-NULL
+vins$maridatge_peix_cru<-NULL
+vins$maridatge_peix_fregit<-NULL
+vins$maridatge_peix_forn<-NULL
+vins$maridatge_peix_brasa<-NULL
+vins$maridatge_peix_fumat<-NULL
+vins$maridatge_peix_salaons<-NULL
+vins$maridatge_peix_escabetx<-NULL
+vins$maridatge_marisc<-NULL
+vins$maridatge_pop<-NULL
+vins$maridatge_bolets<-NULL
+vins$maridatge_cuina_asiatica<-NULL
+vins$maridatge_xocolata<-NULL
+vins$maridatge_pizza<-NULL
+vins$maridatge_paambtomaquet<-NULL
+
+summary(vins)
+```
+
+## 3.14 Generació de camps buits automàtic per KNN
+Finalment, realitzem un últim check per a validar que no existeixen camps buits
+```{r}
+# Nombre de valors desconeguts per camp
+#sapply(vins, function(x) sum(is.na(x)))
+
+# Agrupació per varietats de vi
+vins.negres <- vins[vins$tipologia == "negre",]
+vins.blancs <- vins[vins$tipologia == "blanc",]
+vins.rosats <- vins[vins$tipologia == "rosat",]
+
+vins$preu_euros <- ifelse(vins$tipologia == "negre", kNN(vins.negres)$preu_euros, vins$preu_euros)
+vins$preu_euros <- ifelse(vins$tipologia == "blanc", kNN(vins.blancs)$preu_euros, vins$preu_euros)
+vins$preu_euros <- ifelse(vins$tipologia == "rosat", kNN(vins.rosats)$preu_euros, vins$preu_euros)
+vins$anyada <- kNN(vins)$anyada
+vins$graduacio_alcoholica_per <- kNN(vins)$graduacio_alcoholica_per
+vins$acidesa_g_l_tartaric <- kNN(vins)$acidesa_g_l_tartaric
+vins$sulfuros_total_mg_l <- kNN(vins)$sulfuros_total_mg_l
+vins$sucres_residuals_g_l <- kNN(vins)$sucres_residuals_g_l
+vins$ph <- kNN(vins)$ph
+vins$aspecte <- kNN(vins)$aspecte
+vins$intensitat <- kNN(vins)$intensitat
+vins$aromes_1 <- kNN(vins)$aromes_1
+vins$gust <- kNN(vins)$gust
+
+
+# Nombre de valors desconeguts per camp
+sapply(vins, function(x) sum(is.na(x)))
+```
+
+```{r}
+# Per manca de temps s'han eliminat camps
+vins$estil<-NULL
+vins$premis<-NULL
+
+# Mostrem el tipus de classe associat a cada camp de l'objecte vins
+sapply(vins, function(x) class(x))
+```
+
+## 3.15 Comprovació de valors extrems
+Tot i emprar tècniques dels veïns més propers, la generació automàtica de valors requereix de revalidar que els valors siguin propers als delimitats en els diagrames de  bigotis amb els que s'ha investigat el contingut.
+```{r}
+# Identifiquem els preus fora de sèrie     
+outliers <- boxplot(vins$preu_euros, plot = FALSE)$out
+
+# Eliminem els preus extrems
+vins<-vins[!(vins$preu_euros %in% outliers), ]
+
+# Creem un diagrama de bigotis per a poder identificar que no hi han outliers derivats de l'error de conversió entre punts i comes
+ggplot(vins, aes(x=tipologia, y=preu_euros)) + 
+    geom_boxplot(fill=uoc_palette[1], alpha=0.2) + 
+    xlab("Tipologia del vi") + ylab("Preu del vi (€)")
+```
+
+Els valors de pH poden anar de un 4 (menys àcid) a un 2.8 (més àcid).
+```{r}
+# Creem un diagrama de bigotis per a poder identificar que no hi han outliers derivats de l'error de conversió entre punts i comes
+ggplot(vins, aes(x=tipologia, y=ph)) + 
+    geom_boxplot(fill=uoc_palette[1], alpha=0.2) + 
+    xlab("Tipologia del vi") + ylab("pH")
+```
+Com podem veure,els paràmetres de pH es troben dins dels rangs establerts.
+
+Visualitzem de forma més ràpida la resta de columnes numèriques.
+```{r}
+# Identifiquem anyades fora de sèrie    
+outliers <- boxplot(vins$anyada, plot = FALSE)$out
+
+# Mostrem les anyades extremes detectades
+outliers
+
+# Eliminem els preus extrems
+vins<-vins[!(vins$anyada %in% outliers), ]
+```
+
+```{r}
+# Identifiquem acidesa tartàrica fora de sèrie    
+outliers <- boxplot(vins$acidesa_g_l_tartaric, plot = FALSE)$out
+
+# Mostrem les acideses que s'eliminaràn
+outliers
+
+# Eliminem els les acideses extremes
+vins<-vins[!(vins$acidesa_g_l_tartaric %in% outliers), ]
+```
+
+```{r}
+# Identifiquem els sulfits total fora de sèrie    
+outliers <- boxplot(vins$sulfuros_total_mg_l, plot = FALSE)$out
+
+# Mostrem els sulfits que eliminem
+outliers
+
+# Eliminem els sulfits extrems
+vins<-vins[!(vins$sulfuros_total_mg_l %in% outliers), ]
+```
+```{r}
+# Identifiquem els sucres residuals fora de sèrie    
+outliers <- boxplot(vins$sucres_residuals_g_l, plot = FALSE)$out
+
+# Mostrem els sucres residuals que eliminem
+outliers
+
+# Eliminem els sucres residuals extrems
+vins<-vins[!(vins$sucres_residuals_g_l %in% outliers), ]
+```
+
+## 3.16 Eliminació de columnes innecessàries per falta de scope
+Per temes de schedule no s'han pogut portar a terme les correccions que es volien fer en el terroir i en la elaboració.
+```{r}
+# Eliminació de la variable vinya
+#vins<-vins$vinya <- NULL
+
+# Eliminació de la variable elaboració
+#vins<-vins$elaboracio <- NULL
+```
+
+## 3.17 Exportació del CLEAN dataset: vins_DO_Penedes.csv
+```{r}
+# Exportación de les dades en .csv
+write.csv(vins, "vins_DO_Penedes.csv")
+```
+
+# 4. Anàlisi de les dades
+
+En aquest apartat:
+  - selecció dels grups de dades que es volen analitzar/comparar (4.1)
+  - Comprovació de la normalitat de les dades qualitatives i homogeneïtat de la variància  (4.2)
+  - Proves estadístiques per comparar els grups de dades (4.3)
+  - Anàlisis de correlació quantitativa de variables que influencien més en el preu del vi (4.3.1)
+  - Anàlisis de correlació qualitativa per determinar si el color del vi és suficient per a especificar el tipus de vi que es és? (4.3.2)
+  - Hipòtesis de contrast per entendre si el preu del vi és superior en funció de si és ecològic? (4.3.3)
+  - Model de regressió lineal múltiple per predir el preu d'una botella de vi. (4.3.4)
+
+## 4.1 Selecció dels grups de dades que es volen analitzar/comparar
+Es manté el conjunt de dades de l'apartat anterior.
+
+## 4.2 Comprovació de la normalitat i homogeneïtat de la variància
+
+Per a poder veure si la població de valors està distribuida normalment, s'aplica el el test de Anderson-Darling. 
+```{r}
+col.names = colnames(vins)
+
+# Recorrem per totes les columnes
+for (i in 1:ncol(vins)) {
+  if (i == 1) cat("Variables que no segueixen una distribución normal:\n")
+    # Identifiquem si la columna és numèrica
+    if (is.integer(vins[,i]) | is.numeric(vins[,i])) {
+      # apliquem el test de Anderson-Darling
+      p_val = ad.test(vins[,i])$p.value
+      if (p_val < 0.05) {
+        # mostrem el valor del test amb un cat per evitar mostrar el valor per defecte [1]
+        cat(col.names[i])
+        # format per a permetre concatenar valors
+        if (i < ncol(vins) - 1) cat(", ")
+        if (i %% 3 == 0) cat("\n")
+      }
+  }
+}
+```
+
+Per estudiar la homogeneitat de variàncies entre el preu del vi i l'anyada la realitzem mitjançant l'aplicació d'un test de Fligner-Killeen 
+```{r}
+fligner.test(preu_euros ~ anyada, data = vins)
+```
+
+Com que el p-value és superior a 0.05, acceptem la hipòtesis de que les variànces entre mostres són homogènes.
+
+
+```{r}
+fligner.test(graduacio_alcoholica_per ~ ph, data = vins)
+```
+
+Al obtenir un p-value superior a 0.05 acceptem la hipòtesis de que les variances de les dues mostres són homogènies.
+
+
+## 4.3 Aplicació de proves estadístiques per comparar els grups de dades
+
+
+### 4.3.1 Anàlisis de correlació quantitativa de variables que influencien més en el preu del vi
+Com que tractem les correlacions de dues variables aleatòries continues, podem aplicar el test de Spearman.
+```{r}
+corr_matrix <- matrix(nc = 2, nr = 0)
+colnames(corr_matrix) <- c("estimate", "p-value")
+
+# Calcular el coeficiente de correlació per cada variable quantitativa
+for (i in 1:(ncol(vins) - 1)) {
+  if (is.integer(vins[,i]) | is.numeric(vins[,i])) {
+    spearman_test = cor.test(vins[,i],
+                             vins[,length(vins)],
+                             method = "spearman")
+    corr_coef = spearman_test$estimate
+    p_val = spearman_test$p.value
+
+    # Add row to matrix
+    pair = matrix(ncol = 2, nrow = 1)
+    pair[1][1] = corr_coef
+    pair[2][1] = p_val
+    corr_matrix <- rbind(corr_matrix, pair)
+    rownames(corr_matrix)[nrow(corr_matrix)] <- colnames(vins)[i]
+  }
+}
+print(corr_matrix)
+```
+La variable més correlada amb el preu és el sulfuros_total_mg_l i té coherència. Doncs els vins joves acostumen a tenir una menor quantitat de sulfits (60 mgs./l) que els criança o reserva que tenen una major relació (80 mgs./l). Obviament, el preu d'un criança sempre serà superior.
+No obstant, si ens fixem amb el coeficient de correlació de spearma (ro), amb un valor negatiu no hi ha correlació. I en el millor cas, obtenim un grau de correlació molt feble.
+
+També podem graficar la correlació de forma gràfica  on podem trobar la resta de relacions de forma més general:
+```{r}
+corrgram(vins, order=NULL, lower.panel=panel.shade, upper.panel=NULL, text.panel=panel.txt, main="Correlació entre variables numèriques")
+```
+*Observacions:*
+La correlació de variables numèriques presenta només una correlació forta entre la graduació alcohòlica i el pH. En efecte, els dos paràmetres estan molt polaritzats depenent de si tenim un vi blanc o un vi negre.
+
+També es poden copsar un parell de relacions molt febles. 
+La primera és la de la acidesa i els sucres residuals. Aquesta relació és verídica, ja que conforme avança el estat de maduració del vi, el raïm acumula sucre mentre redueix la acidesa.
+La segona presenta la relació del preu trobada en l'apartat anterior, on el preu en euros és relaciona amb el número de sulfits.
+
+En el cas de voler comprovar la relació entre 
+```{r}
+chisq.test(vins$tipologia, vins$gust)
+```
+
+
+### 4.3.2 Anàlisis de correlació qualitativa per determinar si el color del vi és suficient per a especificar el seu tipus
+
+```{r}
+CODI_CUPATGE<-as.factor(as.numeric(vins$codi_coupage))
+#codi_cup_Rel=relevel(CODI_CUPATGE, ref = '1')
+
+# apliquem el model de relació
+logit_model_1 <- glm(formula=codi_coupage~factor(color), data=vins, family=binomial)
+summary(logit_model_1)
+```
+
+Les variables explicatives que permeten identificar amb certa  claredat el cupatge o mescla de vins amb el color són el daurat i el color palla.
+La resta de variables explicatives estàn llunt de l'aproximació.
+Per tant, no és suficient el color del vi per a poder encertar el tipus de vi que porta. En el cas del daurat es pot relacionar per la gran quantitat de Chardonnay.
+
+### 4.3.3 Hipòtesis de contrast per entendre si el preu del vi és superior en funció de si és ecològic?
+
+Es realitza una hipòtesis de contrast sobre la diferència de preu en funció de si és ecològic o no ho és.
+```{r}
+# Separació de mostres de vi ecològic i no ecològic
+vins.eco.preus <- vins[vins$ecologic == "Si",]$preu_euros
+vins.noeco.preus <- vins[vins$ecologic == "No",]$preu_euros
+```
+Com es mostra a continuació, la hipòtesis nula conclou que el preu no és superior.
+La hipòtesis alternativa considerarà que el preu mig del vi ecològic és superior, de forma que la diferència de mitges serà inferior a 0, el que fa que estiguem davant d'un cas unilateral.
+
+$H_0: \mu_1-\mu_2 = 0$
+$H_1: \mu_1-\mu_2 < 0$
+on $\mu_1$ és la mitja de la població de la primera mostra i  $\mu_2$ és la mitja de la població de la segona mostra. $\alpha = 0.05$
+
+```{r}
+t.test(vins.noeco.preus,vins.eco.preus, alternative = "less")
+```
+
+Amb un p-value superior a la significança fixada, acceptem la hipòtesis nula. Podem refutar la hipòtesis de que un vi ecològic és més car que un vi no ecològic.
+En part té sentit perquè la viticultura ecològica competeix amb els gran reserva i reserva que són molt més cars.
+
+
+### 4.3.4 Model de regressió lineal múltiple per a identificar el preu d'una botella de vi
+
+Es cerca poder modelar el preu del vi, de forma que quan es vagi a buscar una botella es tingui una preu de referència.
+La forma òptima de realitzar les regressions lineal múltiples, a través de les variables que estan més correlades amb el preu i considerar-les en funció de la seva màxima correlació. No obstant, com que la variable no s'ha pogut correlar, s'ha optat per a implementar regressors qualitatius amb la finalitat d'escollir aquella que presenti un major coeficient de determinació.
+
+```{r}
+# Generació de models variant els regressors
+# Model algorismic 1 per trobar el preu del vi
+model1 <- lm(preu_euros ~ tipologia + color + codi_coupage + vector_maridatge + gust, data = vins)
+# Model fitxa de cata: Amb la informació de cata és suficient per establir el preu del vi?
+model2 <- lm(preu_euros ~ tipologia + aspecte + color + intensitat + aromes_1 + aromes_2 + aromes_3 + gust + post_gust, data = vins)
+# Model etiqueta: La informació de la etiqueta és suficient per establir el preu del vi?
+model3 <- lm(preu_euros ~ tipologia + envelliment + codi_coupage + anyada + ecologic + celler + graduacio_alcoholica_per + poblacio, data = vins)
+# Model cupatge, maridatge, celler
+model4 <- lm(preu_euros ~ codi_coupage + vector_maridatge + celler, data = vins)
+
+# Calculem la bondat d'ajust per cada model
+tabla.coeficientes <- matrix(c(1, summary(model1)$r.squared,
+2, summary(model2)$r.squared,
+3, summary(model3)$r.squared,
+4, summary(model4)$r.squared),
+ncol = 2, byrow = TRUE)
+colnames(tabla.coeficientes) <- c("Model", "R^2")
+
+# mostra taula
+tabla.coeficientes
+```
+En la taula comparativa de bondats d'ajust, el model més òptim és el 4t, tot i que no ajusta correctament a les dades.
+
+Apliquem un exemple segons el model 4, en el que predirem el preu d'un vi Cabernet Sauvignon, que maridi amb carns blanques del celler Torelló:
+```{r}
+# Exemple 1: Busquem un Cabernet Sauvignon,que maridi amb carns blanques de Torelló
+
+# Exemple individual de la funció
+#codicoupage_a_raims("00000000000000000000000000000001000000000000000000000000")
+
+
+newdata <- data.frame(
+codi_coupage = "00000000000000000000000000000001000000000000000000000000",
+vector_maridatge = "000001110000000000000000000000000",
+celler="Torelló"
+)
+# Predicció del preu
+preu_estimat <- predict(model4, newdata)
+
+sprintf("El preu per a la botella de vi que busques hauria d'aproximar-se al preu de %#.2f €.", preu_estimat)
+```
+
+```{r}
+#library(pROC)
+#prob_low=predict(model4, vins, type="response")
+#r=roc(preu_estimat,prob_low, data=vins)
+```
+
+# 5. Representació dels resultats a partir de taules i gràfiques
+
+Com que l'apartat anterior no disposa de gràfiques, en aquest apartat s'han desenvolupat unes quantes preguntes amb resposta visual.
+S'ha entès que, al fer èmfasis per part del professor en el desenvolupament de gràfiques elaborades, s'esperaria dins el contingut de la pràctica.
+
+En aquest apartat:
+  - Quins són els sabors del vi pels quals estem disposats a pagar més? (5.1)
+  - Quins són els cupatges per anyada més rendibles en D.O. Penedès? (5.2)
+  - Com podem aconseguir un gust en funció de la varietat de vi D.O. Penedès? (5.3)
+  - Quines varietats de vins D.O. Penedès mariden millor? (5.4)
+
+## 5.1 Quins són els sabors pels que paguem més el vi?
+```{r}
+ggplot(vins, aes(x = gust, y = tipologia, fill = preu_euros)) + geom_tile() +
+  scale_fill_gradient2(low = "green", high = "red")+ theme(axis.text.x=element_text(angle=90, hjust=1))+ labs(title="Per a quins sabors es paga més el D.O. Penedès", x="Gust predominant", y = "Tipus de vi")
+```
+
+## 5.2 Quins cupatges són els més rendibles en la D.O. Penedès?
+
+```{r}
+# Funció codicoupage a conversió de raïms emprats en el cupatge
+codicoupage_a_raims <- function(x) {
+  # Conversor del codi de coupatge a tipus de raïm
+  cupatge_str<-""
+  
+  raim <-c("Airen", "PansaBlanca", "Albarinyo", "Carinyena Blanca", "Chardonnay", "Chenin Blanc", "Coromina", "Forcada", "Garnatxa Blanca", "Gewurztraminer", "GiroRos", "Godello", "Macabeu", "Malvasia de Sitges", "Moscatell Alexandria", "Moscatell Gra Menut", "Parellada", "PedroXimenes", "Picapoll Blanc", "Riesling", "Sauvignon Blanc", "Subirat Parent", "Sumoll Blanc", "Trobat Blanc", "Verdejo", "Vermentino", "Vinyater", "Viognier", "Xarel·lo", "Boval", "Cabernet Franc", "Cabernet Sauvignon", "Garnatxa Peluda", "Garnatxa Negra", "Garnatxa Tintorera", "Garró", "Gonfau", "Graciano", "Malbec", "Marselan", "Samsó", "Merlot", "Monastrell", "Moneu", "Morenillo", "PetitVerdot", "Picapoll Negre","Pinot Noir", "Querol", "Solana", "Sumoll", "Syrah", "Ull de Llebre", "Trepat", "Vidadillo", "Xarel·lo Rosat")
+  n <- gregexpr(pattern ='1',x)[[1]]
+  if ( n != "-1") {
+    for (p in gregexpr(pattern ='1',x)[[1]]) {
+      cupatge_str<-paste(cupatge_str,raim[p], sep="-")
+    }
+    cupatge_str<-substring(cupatge_str, 2)
+    } else {
+    cupatge_str<-NA
+  }
+  return(cupatge_str)
+}
+
+# Exemple individual de la funció
+#codicoupage_a_raims("00000000000000000001000000000000000000000100000000000000")
+
+# Apliquem la conversió de 1 del codi al format de interpretable
+vins$codi_coupage<-apply(vins['codi_coupage'],1,codicoupage_a_raims)
+```
+
+
+```{r fig.height = 10, fig.width = 10}
+ggplot(vins, aes(x = anyada, y = codi_coupage, fill = preu_euros)) + geom_tile() +
+  scale_fill_gradient2(low = "#73EDFF", high = "#000078")+ theme(axis.text.x=element_text(angle=90, hjust=1))+ labs(title="Per a quina varietat de vi i anyada es paga més el D.O. Penedès", x="Anyada", y = "Cupatge")
+```
+
+## 5.3 Identificar els gustos amb els cupatges
+
+```{r fig.height = 10, fig.width = 10}
+library("scales")
+vins$ph2 <- rescale(vins$preu_euros, to = c(0, 1)) 
+ggplot(vins, aes(x = gust, y = codi_coupage, fill = ph2)) + geom_tile() +
+  scale_fill_gradient2(low = "white", high = "red", mid="black")+ theme(axis.text.x=element_text(angle=90, hjust=1))+ labs(title="Quins gustos acostumen a acompanyar les varitetats D.O. Penedès", x="Gustos", y = "Cupatge")+ theme(legend.position = "none")
+
+```
+
+## 5.4 Entendre els gustos amb els maridatges: quines varietats de vins mariden millor
+```{r fig.height = 10, fig.width = 10}
+
+# Converteix les descripcions de fase visual de l'aspecte en característiques descriptives
+vins$maridatge_arrossos <- ifelse(grepl('arrossos|paelles', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_pastes <- ifelse(grepl('pastes|pasta|fideus|fideuà', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_aperitius <- ifelse(grepl('aperitius|tapes|entrants|entrant|pica-pica', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_canalons <- ifelse(grepl('canalons', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_amanida <- ifelse(grepl('amanida|amanides', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_carn_v <- ifelse(grepl('carns|carn vermella|carns vermelles|vedella|bou|cavall', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_carn_b <- ifelse(grepl('carns|carn blanca|ànec|pollastre|aus|porc|conill|indi|xai', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_carn_c <- ifelse(grepl('carns|caça|senglar|llebre', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_pates <- ifelse(grepl('patés', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_guisats <- ifelse(grepl('plats amb salses|salses|guisats|guisades|fricandó|estofat|estufades|peus de porc', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_rostits <- ifelse(grepl('rostits', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_embotits <- ifelse(grepl('embotits|pernils ibèrics', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_formatges_frescos <- ifelse(grepl('formatges frescos|formatge fresc', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_formatges_tendres <- ifelse(grepl('formatges de pasta tova|tendres|formatges cremosos', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_formatges_semicurats <- ifelse(grepl('formatges semi curats| semicurat', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_formatges_curats <- ifelse(grepl('formatges curats', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_formatges_potents <- ifelse(grepl('formatges blaus', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_blau <- ifelse(grepl('peix|peix blau|peixos blaus|peixos grassos|salmó', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_blanc <- ifelse(grepl('peix|peix blanc|peixos blancs', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_cru <- ifelse(grepl('carpaccio|peix cru| salmó|tonyina|carpaccions', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_fregit <- ifelse(grepl('peix fregit', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_forn <- ifelse(grepl('peix forn', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_brasa <- ifelse(grepl('peix brasa', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_fumat <- ifelse(grepl('fumats', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_salaons <- ifelse(grepl('anxoves', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_peix_escabetx <- ifelse(grepl('escabetxats', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_marisc <- ifelse(grepl('marisc|crustàcis|ostres|gambes|galeres', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_pop <- ifelse(grepl('pop', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_bolets <- ifelse(grepl('bolets', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_cuina_asiatica <- ifelse(grepl('cuina asiàtica|japonesa|cuina de fusió', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_xocolata <- ifelse(grepl('xocolata', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_pizza <- ifelse(grepl('pizza|pizzes', vins$maridatge, ignore.case = T), 1, 0)
+vins$maridatge_paambtomaquet <- ifelse(grepl('pa amb tomàquet', vins$maridatge, ignore.case = T), 1, 0)
+
+subset_x<-subset(vins, select = c('codi_coupage', 'maridatge_arrossos', 'maridatge_pastes', 'maridatge_aperitius','maridatge_canalons','maridatge_amanida','maridatge_carn_v','maridatge_carn_b','maridatge_carn_c','maridatge_pates','maridatge_guisats','maridatge_rostits','maridatge_embotits','maridatge_formatges_frescos','maridatge_formatges_tendres','maridatge_formatges_semicurats','maridatge_formatges_curats','maridatge_formatges_potents','maridatge_peix_blau','maridatge_peix_blanc','maridatge_peix_cru','maridatge_peix_fregit','maridatge_peix_forn','maridatge_peix_brasa','maridatge_peix_fumat','maridatge_peix_salaons','maridatge_peix_escabetx','maridatge_marisc','maridatge_pop','maridatge_bolets','maridatge_cuina_asiatica','maridatge_xocolata','maridatge_pizza','maridatge_paambtomaquet'))
+#y1<-table(subset_x)
+
+subset_x$codi_coupage <- factor(subset_x$codi_coupage) # make year a factor.
+
+t1<-aggregate(x = subset_x$maridatge_arrossos,by = list(subset_x$codi_coupage),FUN = sum) 
+t2<-aggregate(x = subset_x$maridatge_pastes,by = list(subset_x$codi_coupage),FUN = sum) 
+t3<-aggregate(x = subset_x$maridatge_aperitius,by = list(subset_x$codi_coupage),FUN = sum) 
+t4<-aggregate(x = subset_x$maridatge_canalons,by = list(subset_x$codi_coupage),FUN = sum) 
+t5<-aggregate(x = subset_x$maridatge_amanida,by = list(subset_x$codi_coupage),FUN = sum) 
+t6<-aggregate(x = subset_x$maridatge_carn_v,by = list(subset_x$codi_coupage),FUN = sum) 
+t7<-aggregate(x = subset_x$maridatge_carn_b,by = list(subset_x$codi_coupage),FUN = sum) 
+t8<-aggregate(x = subset_x$maridatge_carn_c,by = list(subset_x$codi_coupage),FUN = sum) 
+t9<-aggregate(x = subset_x$maridatge_pates,by = list(subset_x$codi_coupage),FUN = sum) 
+t10<-aggregate(x = subset_x$maridatge_guisats,by = list(subset_x$codi_coupage),FUN = sum) 
+t11<-aggregate(x = subset_x$maridatge_rostits,by = list(subset_x$codi_coupage),FUN = sum) 
+t12<-aggregate(x = subset_x$maridatge_embotits,by = list(subset_x$codi_coupage),FUN = sum) 
+t13<-aggregate(x = subset_x$maridatge_formatges_frescos,by = list(subset_x$codi_coupage),FUN = sum) 
+t14<-aggregate(x = subset_x$maridatge_formatges_tendres,by = list(subset_x$codi_coupage),FUN = sum) 
+t15<-aggregate(x = subset_x$maridatge_formatges_semicurats,by = list(subset_x$codi_coupage),FUN = sum) 
+t16<-aggregate(x = subset_x$maridatge_formatges_curats,by = list(subset_x$codi_coupage),FUN = sum) 
+t17<-aggregate(x = subset_x$maridatge_formatges_potents,by = list(subset_x$codi_coupage),FUN = sum) 
+t18<-aggregate(x = subset_x$maridatge_peix_blau,by = list(subset_x$codi_coupage),FUN = sum) 
+t19<-aggregate(x = subset_x$maridatge_peix_blanc,by = list(subset_x$codi_coupage),FUN = sum) 
+t20<-aggregate(x = subset_x$maridatge_peix_cru,by = list(subset_x$codi_coupage),FUN = sum) 
+t21<-aggregate(x = subset_x$maridatge_peix_fregit,by = list(subset_x$codi_coupage),FUN = sum) 
+t22<-aggregate(x = subset_x$maridatge_peix_forn,by = list(subset_x$codi_coupage),FUN = sum) 
+t23<-aggregate(x = subset_x$maridatge_peix_brasa,by = list(subset_x$codi_coupage),FUN = sum) 
+t24<-aggregate(x = subset_x$maridatge_peix_fumat,by = list(subset_x$codi_coupage),FUN = sum) 
+t25<-aggregate(x = subset_x$maridatge_peix_salaons,by = list(subset_x$codi_coupage),FUN = sum) 
+t26<-aggregate(x = subset_x$maridatge_peix_escabetx,by = list(subset_x$codi_coupage),FUN = sum) 
+t27<-aggregate(x = subset_x$maridatge_marisc,by = list(subset_x$codi_coupage),FUN = sum) 
+t28<-aggregate(x = subset_x$maridatge_pop,by = list(subset_x$codi_coupage),FUN = sum) 
+t29<-aggregate(x = subset_x$maridatge_bolets,by = list(subset_x$codi_coupage),FUN = sum) 
+t30<-aggregate(x = subset_x$maridatge_cuina_asiatica,by = list(subset_x$codi_coupage),FUN = sum) 
+t31<-aggregate(x = subset_x$maridatge_xocolata,by = list(subset_x$codi_coupage),FUN = sum) 
+t32<-aggregate(x = subset_x$maridatge_pizza,by = list(subset_x$codi_coupage),FUN = sum) 
+t33<-aggregate(x = subset_x$maridatge_paambtomaquet,by = list(subset_x$codi_coupage),FUN = sum) 
+
+df3 <- data.frame(t1,t2[2],t3[2],t4[2],t5[2],t6[2],t7[2],t8[2],t9[2],t10[2],t11[2],t12[2],t13[2],t14[2],t15[2],t16[2],t17[2],t18[2],t19[2],t20[2],t21[2],t22[2],t23[2],t24[2],t25[2],t26[2],t27[2],t28[2],t29[2],t30[2],t31[2],t32[2],t33[2])
+
+colnames(df3) <- c('codi_coupage', 'arrossos', 'pastes', 'aperitius','canalons','amanida','carns vermelles','carns blanques','caça','patés','guisats','rostits','embotits','formatges  frescos','formatges tendres','formatges semicurats','formatges curats','formatges potents','peix blau','peix blanc','peix cru','peix fregit','peix forn','peix brasa','peix fumat','peix salaons','peix escabetx','marisc','pop','bolets','cuina asiàtica','xocolata','pizza','pa amb tomàquet')
+
+# Guardem la informació com rownames
+df4 <- df3;
+rownames(df4) <- df3[, 1];
+
+# Eliminem la columna no numèrica
+df4 <- df4[, -1];
+
+# Emprem as.matrix per a convertir data.frame a una matriu
+logmap <- heatmap(as.matrix(df4), scale = "column", Colv=NA, Rowv=NA, margins = c(5, 10), main = "Relació entre el maridatge i el cupatge per a vins D.O. Penedès")
+```
+
+
+# 6. Conclusions
+
+## 6.1 Resultats
+Els paràmetres de correlació i contrast d'hipòtesis no han sigut concluents per a poder identificar quines variables exerceixen una major influència sobre el preu final de la botella de vi. S'ha trobat que l'execució del markdown tenia una forta variació provinent de les dades generades per KNN, també que el nombre de NA en la taula llegida era considerable. Ambdos indicadors determinen que no hi havia suficient informació en la taula inicial com per a poder donar uns resultats concluents.
+
+En un àmbit professional caldria reunir-se amb els stakeholders per reavaluar les dades o les preguntes. No obstant, com que aquesta pràctica requereix exposar els resultats, a continuació s'exposen els resultats de les slides, atès que són els únics que romandràn estàtics. Comento aquest aspecte perquè cada vegada que s'executa Knit, el programa s'executa de nou i hi ha risc de que es modifiquin.
+
+Com ja s'ha avançat en el paràgraf anterior, s'ha realitzat un anàlisis de correlació quantitiva amb la finalitat de saber quins paràmetres numèrics poden influenciar en el preu del vi. Els paràmetres que es tenien en comtpe era la anyada de la botella (any de producció), la graduació alcohòlica, la acidesa , el número de sulfits, el ph i el preu en euros. La variable que presentava una major correlació eren els sulfits. De fet, els vins amb criança tenen molts més sulfits que els vins joves, de forma que té certa lògica.
+
+Pel que fa a l'anàlisis de correlació qualitativa per a determinar si el color del vi era suficient per a especifar de quin tipus de vi es tractava, s'ha obtingut una lleugera resposta en vins blancs, on hi hauria certa probabilitat de detectar correctament els blancs de color daurat i color palla.
+
+Pel que fa a la hipòtesis de contraast per entendre si el preu d'un vi ecològic és major a un vi convencional ha donat que resulta fals, en bona mesura perquè s'ha tingut en compte els reserva i criança que no ho són, mentre que la majoria de ecològics són vins joves.
+
+Finalment, s'ha realitzat un model de regressió lineal múltiples per predir el preu d'una botella de vi on en el millor dels casos s'ha obtingut una bondat d'ajust de 0.92 introduint el codi del cupatge de vins (per exemple un Merlot), el maridatge (per prendre amb carn) i el nom del celler (del celler Torres).
+
+Pel que fa a les gràfiques, destaca en temes de sabors que en els vins vermells paguem més per sedosos, càlids i amables, mentre que en blancs per equilibrats i afruitats.
+Pel que fa al preu segons varietat i l'anyada es presenta un patró individual. Faltaria un major nombre de dades per a poder identificar grans anyades derivades de la climatologia i meteorologia de l'any. Es considera no concluent.
+Pel que fa als gustos que més defineixen els vins D.O. Penedès són equilibrat, suau i fresc.
+El Xarel·lo, Merlot, Cabernet-Sauvignon són els vins tot terreny per tenir a la cuina, ja que mariden amb infinitat de plats.
+
+Per a solucionar el problema de la falta d'informació, s'ha fet ús abusiu del mètode d'imputació de valors. Aquest mètode té sentit si tenim un gran volum de dades i un petit percentatge de camps buits. No obstant, s'ha près aquesta decisió per a poder entregar la pràctica a temps.
+Un altra punt interessant al mancar dades és que entre elles es poden ajudar per extreure informació. Aquest aspecte fa que sigui necessari un ordre, no es pot començar a netejar un camp sense abans estar segur de que no pot ajudar-ne un altra. Per exemple, hi ha tipologies que apareix "vi negre jove"", el valor jove es correspont a la criança i cal implementar-lo en el camp corresponent (si no existeix). 
+
+En conclusió, per a donar uns resultats estadísticament acceptables, *caldria demanar als nostres stakeholders més dades quantitatives* per a poder aproximar els  resultats.
+
+## 6.2 Pràctica
+En aquesta ocasió, s'ha escollit treballar amb un dataset real per a experimentar les dificultats amb les que es troba un analista de dades. Lluny dels datasets preparats de Kaggle, UCI Machine Learning Repository, etc, aquest ha permès veure la importància de la qualitat en les dades.
+El que s'ha destacat és el gran volum de treball en la primera fase de neteja de dades per intentar estabilitzar-les, especialment en identificar aquelles columnes troncals a partir de les quals pots netejar la resta.
+
+El problema més important amb el que m'he trobat és que les fitxes de cata són molt qualitatives i molt poc quantitatives. S'acostuma a donar el grau d'alcohol i el preu. Però la resta de parametres científics com el pH, sulfats, sucres residuals, etc. només s'acostuma a donar per a botelles on cal justificar el preu i això altera la informació. 
+
+La motivació de la pràctica 2 és la d'ampliar el porfolio dels meus treballs per a poder demostrar les habilitats en el camp de la ciència de dades. En aquesta ocasió, també em tenia encuriosit després d'una participació en una cata a cegues sense tenir-ne cap coneixement.
+
+# 7. Taula de contribucions
+|       Contribucions       |  Signatura  |
+|:-------------------------:|:-----------:|
+| Investigació prèvia       |     JMV     |
+| Redacció de les respostes |     JMV     |
+| Desenvolupament del codi  |     JMV     |
+
+# 8. Recursos
+
+  1. Nofuentes O. INCAVI (2020) A taula! Vins Catalans. Manual per a la restauració. Editorial SOM.
+  2. Bodegas Sierra Norte. Ficha de cata. http://www.bodegasierranorte.com/wp-content/uploads/2016/01/FICHA-DE-CATA_BODEGA-SIERRA-NORTE_CATA-A-CIEGAS.pdf
+  3. Calvo M., Subirats L., Pérez D. (2019). Introducción a la limpieza y análisis de los datos. Editorial UOC.
+  4. Recurs online sobre test en R: https://stats.oarc.ucla.edu/other/mult-pkg/whatstat/
+  5. Recurs online sobre visualitzacions en R: https://www.data-to-viz.com/
+  6. Teguayco Gutiérrez González. Ejemplo Práctica 2: Limpieza y validación de los datos
